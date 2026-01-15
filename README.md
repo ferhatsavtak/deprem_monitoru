@@ -12,7 +12,7 @@
   ![Leaflet](https://img.shields.io/badge/Leaflet-199900?logo=leaflet&logoColor=white)
 
   <h3>
-    <a href="https://ferhatsavtak.github.io/deprem_monitoru">🚀 Canlı Demo</a>
+    <a href="https://ferhatsavtak.github.io/deprem_monitoru">🚀 Canlı Demo İçin Tıklayınız.</a>
   </h3>
 </div>
 
