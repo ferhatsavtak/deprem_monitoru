@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Türkiye Canlı Deprem Monitörü</title>
-    <meta name="description" content="Türkiye ve çevresi için anlık ve detaylı deprem takip sistemi.">
+    <title>Türkiye Canlı Deprem Monitörü | Kandilli & AFAD</title>
+    <meta name="description" content="Türkiye ve çevresi için anlık ve detaylı deprem takip sistemi, aktif fay hatları, istatistikler ve acil durum rehberi.">
 
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -12,7 +12,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
     
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="faults.js"></script>
 
     <script>
         tailwind.config = {
@@ -21,9 +22,9 @@
                 extend: {
                     fontFamily: { sans: ['Inter', 'sans-serif'] },
                     colors: {
-                        dark: { 900: '#0f172a', 800: '#1e293b', 700: '#334155', 600: '#475569' },
+                        dark: { 950: '#080d1a', 900: '#0f172a', 800: '#1e293b', 700: '#334155', 600: '#475569' },
                         soft: { 50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 300: '#cbd5e1' },
-                        brand: { 500: '#6366f1', 600: '#4f46e5' },
+                        brand: { 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' },
                         quake: { 
                             low: '#10b981',     // < 3.0
                             mid: '#fbbf24',     // 3.0 - 3.9
@@ -48,22 +49,21 @@
         ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
         /* Map Popup */
-        .leaflet-popup-content-wrapper { border-radius: 12px; backdrop-filter: blur(10px); }
+        .leaflet-popup-content-wrapper { border-radius: 14px; backdrop-filter: blur(12px); }
         .dark .leaflet-popup-content-wrapper { background: rgba(15, 23, 42, 0.95); color: #e2e8f0; border: 1px solid #334155; }
         .dark .leaflet-popup-tip { background: #334155; }
-        .leaflet-popup-content-wrapper { background: rgba(255, 255, 255, 0.95); color: #334155; border: 1px solid #cbd5e1; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        .leaflet-popup-content-wrapper { background: rgba(255, 255, 255, 0.96); color: #334155; border: 1px solid #cbd5e1; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.2); }
         .leaflet-popup-tip { background: #cbd5e1; }
         
-        
         @keyframes ripple-wave-huge {
-            0% { transform: scale(0.1); opacity: 0.6; border-width: 10px; }
+            0% { transform: scale(0.1); opacity: 0.7; border-width: 10px; }
             100% { transform: scale(80); opacity: 0; border-width: 0px; }
         }
         .quake-wave-huge { position: relative; pointer-events: none; }
         .quake-wave-huge::before {
             content: ''; position: absolute; top: 50%; left: 50%; width: 100%; height: 100%;
             border: 4px solid currentColor; border-radius: 50%; transform: translate(-50%, -50%);
-            box-sizing: border-box; animation: ripple-wave-huge 3s ease-out forwards;
+            box-sizing: border-box; animation: ripple-wave-huge 3.5s ease-out forwards;
         }
 
         /* Sidebar Transitions */
@@ -81,11 +81,26 @@
         .marker-cluster-large { background-color: rgba(239, 68, 68, 0.6); } .marker-cluster-large div { background-color: rgba(239, 68, 68, 0.6); }
 
         /* Badge Dot */
-        .badge-dot { width: 8px; height: 8px; background-color: #ef4444; border-radius: 50%; position: absolute; top: 4px; right: 4px; box-shadow: 0 0 4px #ef4444; }
+        .badge-dot { width: 8px; height: 8px; background-color: #ef4444; border-radius: 50%; position: absolute; top: 4px; right: 4px; box-shadow: 0 0 6px #ef4444; }
+
+        /* Strobe Effect for SOS */
+        @keyframes sos-flash {
+            0%, 50%, 100% { background-color: #ef4444; }
+            25%, 75% { background-color: #ffffff; }
+        }
+        .sos-active {
+            animation: sos-flash 0.5s infinite !important;
+        }
+
+        /* Fault line glow */
+        .fault-glow {
+            filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.8));
+        }
     </style>
 </head>
 <body class="bg-soft-100 dark:bg-dark-900 text-slate-700 dark:text-slate-200 h-[100dvh] w-screen overflow-hidden flex flex-col md:flex-row transition-colors duration-300">
 
+    <!-- Mobile Header -->
     <header class="md:hidden fixed top-0 left-0 w-full h-16 bg-white/95 dark:bg-dark-800/95 backdrop-blur-md z-mobile-header border-b border-soft-200 dark:border-gray-700 flex items-center justify-between px-4 shadow-sm">
         <button id="mobile-menu-btn" class="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700 text-slate-700 dark:text-slate-200 transition relative">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-7 h-7"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
@@ -94,60 +109,98 @@
         <div class="flex items-center justify-center flex-1 mx-4">
             <img id="logo-mobile" src="img/logo2.svg" alt="Logo" class="h-10 w-auto object-contain">
         </div>
-        <button id="mobile-theme-btn" class="p-2 -mr-2 rounded-lg text-yellow-500 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition">🌞</button>
+        <div class="flex items-center gap-1">
+            <button id="mobile-sound-btn" class="p-2 rounded-lg text-gray-500 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition" title="Ses Ayarları">🔇</button>
+            <button id="mobile-theme-btn" class="p-2 -mr-2 rounded-lg text-yellow-500 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700 transition">🌞</button>
+        </div>
     </header>
 
-    <aside id="sidebar" class="sidebar-transition sidebar-closed fixed md:relative top-0 left-0 h-full w-[85vw] md:w-[400px] bg-soft-50/95 dark:bg-dark-800/95 backdrop-blur-xl z-sidebar flex flex-col border-r border-soft-200 dark:border-gray-700 shadow-2xl md:shadow-none pt-16 md:pt-0">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar-transition sidebar-closed fixed md:relative top-0 left-0 h-full w-[88vw] md:w-[410px] bg-soft-50/95 dark:bg-dark-800/95 backdrop-blur-xl z-sidebar flex flex-col border-r border-soft-200 dark:border-gray-700 shadow-2xl md:shadow-none pt-16 md:pt-0">
         <div id="sidebar-overlay" class="md:hidden fixed inset-0 bg-black/50 z-[-1] hidden opacity-0 transition-opacity duration-300"></div>
 
+        <!-- Desktop Header -->
         <div class="hidden md:flex p-4 border-b border-soft-200 dark:border-gray-700 shrink-0 flex-col gap-4">
             <div class="flex justify-between items-center h-16 relative">
-                <div class="flex-1 flex justify-start items-center h-full px-2">
+                <div class="flex-1 flex justify-start items-center h-full px-1">
                     <img id="logo-desktop" src="img/logo2.svg" alt="Deprem Monitörü" class="h-14 w-auto object-contain transition-all hover:scale-105">
                 </div>
-                <div class="flex gap-2">
-                    <button id="desktop-theme-btn" class="p-2.5 rounded-xl bg-white border border-soft-200 dark:border-transparent dark:bg-dark-700 hover:bg-gray-50 dark:hover:bg-dark-600 transition text-yellow-500 dark:text-gray-300 shadow-sm text-xl" title="Temayı Değiştir">🌞</button>
-                    <button id="stats-btn" class="p-2.5 rounded-xl bg-white border border-soft-200 dark:border-transparent dark:bg-dark-700 hover:bg-gray-50 dark:hover:bg-dark-600 transition text-brand-600 dark:text-brand-500 shadow-sm text-xl" title="İstatistikler">📊</button>
-                    <button id="sound-btn" class="p-2.5 rounded-xl bg-white border border-soft-200 dark:border-transparent dark:bg-dark-700 hover:bg-gray-50 dark:hover:bg-dark-600 transition text-gray-400 shadow-sm text-xl" title="Sesi Aç/Kapat">🔇</button>
-                    <button id="info-btn" class="p-2.5 rounded-xl bg-white border border-soft-200 dark:border-transparent dark:bg-dark-700 hover:bg-gray-50 dark:hover:bg-dark-600 transition text-gray-500 dark:text-gray-400 shadow-sm text-xl" title="Bilgi">ℹ️</button>
+                <div class="flex gap-1.5">
+                    <button id="desktop-theme-btn" class="p-2.5 rounded-xl bg-white border border-soft-200 dark:border-transparent dark:bg-dark-700 hover:bg-gray-50 dark:hover:bg-dark-600 transition text-yellow-500 dark:text-gray-300 shadow-sm text-lg" title="Temayı Değiştir">🌞</button>
+                    <button id="stats-btn" class="p-2.5 rounded-xl bg-white border border-soft-200 dark:border-transparent dark:bg-dark-700 hover:bg-gray-50 dark:hover:bg-dark-600 transition text-brand-600 dark:text-brand-500 shadow-sm text-lg" title="Detaylı İstatistikler">📊</button>
+                    <button id="sound-btn" class="p-2.5 rounded-xl bg-white border border-soft-200 dark:border-transparent dark:bg-dark-700 hover:bg-gray-50 dark:hover:bg-dark-600 transition text-gray-400 shadow-sm text-lg relative" title="Ses ve Alarm Ayarları">
+                        <span id="sound-icon">🔇</span>
+                    </button>
+                    <button id="info-btn" class="p-2.5 rounded-xl bg-white border border-soft-200 dark:border-transparent dark:bg-dark-700 hover:bg-gray-50 dark:hover:bg-dark-600 transition text-gray-500 dark:text-gray-400 shadow-sm text-lg" title="Rehber, Çanta & Düdük">ℹ️</button>
                 </div>
             </div>
         </div>
 
-        <div class="p-4 space-y-3 border-b border-soft-200 dark:border-gray-700 bg-white/50 dark:bg-dark-800/50">
-            <div class="flex flex-col gap-1.5">
-                <label class="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400 tracking-wider">Veri Kaynağı</label>
-                <div class="flex bg-soft-200 dark:bg-dark-900 p-1 rounded-lg border border-soft-300 dark:border-gray-700 relative">
+        <!-- Filters & Controls Area -->
+        <div class="p-3.5 space-y-2.5 border-b border-soft-200 dark:border-gray-700 bg-white/60 dark:bg-dark-800/60">
+            <!-- Source Selector & Live Refresh -->
+            <div class="flex items-center justify-between gap-2">
+                <div class="flex-1 flex bg-soft-200 dark:bg-dark-900 p-0.5 rounded-lg border border-soft-300 dark:border-gray-700 relative">
                     <button id="btn-kandilli" class="source-btn active flex-1 py-1.5 text-xs font-bold rounded-md transition text-gray-600 dark:text-gray-300 relative" data-source="kandilli">KANDİLLİ<span id="badge-kandilli" class="hidden badge-dot animate-pulse"></span></button>
                     <button id="btn-afad" class="source-btn flex-1 py-1.5 text-xs font-bold rounded-md transition text-gray-600 dark:text-gray-300 relative" data-source="afad">AFAD<span id="badge-afad" class="hidden badge-dot animate-pulse"></span></button>
                 </div>
+                <button id="refresh-btn" class="p-2 rounded-lg bg-soft-100 hover:bg-soft-200 dark:bg-dark-900 dark:hover:bg-dark-700 border border-soft-300 dark:border-gray-700 text-brand-600 dark:text-brand-400 transition" title="Verileri Şimdi Yenile">
+                    <svg id="refresh-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+                </button>
             </div>
+
+            <!-- Stats Mini-Grid -->
             <div class="grid grid-cols-3 gap-2">
-                <div class="bg-white dark:bg-dark-700 p-2 rounded-lg text-center shadow-sm border border-soft-200 dark:border-gray-600 cursor-pointer hover:bg-soft-50 dark:hover:bg-dark-600" onclick="document.getElementById('stats-modal').style.display='flex'">
-                    <div class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">Adet</div>
-                    <div id="stat-count" class="text-lg font-bold text-brand-600 dark:text-brand-500">-</div>
+                <div class="bg-white dark:bg-dark-700 p-2 rounded-lg text-center shadow-sm border border-soft-200 dark:border-gray-600 cursor-pointer hover:bg-soft-50 dark:hover:bg-dark-600 transition" onclick="openStatsModal()">
+                    <div class="text-[9px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-bold">Toplam</div>
+                    <div id="stat-count" class="text-base font-bold text-brand-600 dark:text-brand-500">-</div>
                 </div>
                 <div class="bg-white dark:bg-dark-700 p-2 rounded-lg text-center shadow-sm border border-soft-200 dark:border-gray-600">
-                    <div class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">Max</div>
-                    <div id="stat-max" class="text-lg font-bold text-quake-severe">-</div>
+                    <div class="text-[9px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-bold">Max</div>
+                    <div id="stat-max" class="text-base font-bold text-quake-severe">-</div>
                 </div>
                 <div class="bg-white dark:bg-dark-700 p-2 rounded-lg text-center shadow-sm border border-soft-200 dark:border-gray-600">
-                    <div class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">Son</div>
-                    <div id="stat-last" class="text-xs font-bold mt-1 truncate px-1">-</div>
+                    <div class="text-[9px] uppercase tracking-wider text-gray-500 dark:text-gray-400 font-bold">Son</div>
+                    <div id="stat-last" class="text-xs font-bold mt-0.5 truncate px-0.5">-</div>
                 </div>
             </div>
-            <div class="flex gap-1 bg-soft-100 dark:bg-dark-900 p-1 rounded-lg border border-soft-200 dark:border-gray-700">
-                <button class="filter-btn active flex-1 py-1.5 text-xs font-medium rounded hover:bg-white dark:hover:bg-dark-700 transition text-gray-600 dark:text-gray-300" data-time="24">24S</button>
-                <button class="filter-btn flex-1 py-1.5 text-xs font-medium rounded hover:bg-white dark:hover:bg-dark-700 transition text-gray-600 dark:text-gray-300" data-time="0">TÜMÜ</button>
+
+            <!-- Time Filter Range -->
+            <div class="flex gap-1 bg-soft-100 dark:bg-dark-900 p-1 rounded-lg border border-soft-200 dark:border-gray-700 text-xs">
+                <button class="filter-btn flex-1 py-1 font-semibold rounded hover:bg-white dark:hover:bg-dark-700 transition text-gray-600 dark:text-gray-300" data-time="1">1S</button>
+                <button class="filter-btn flex-1 py-1 font-semibold rounded hover:bg-white dark:hover:bg-dark-700 transition text-gray-600 dark:text-gray-300" data-time="6">6S</button>
+                <button class="filter-btn active flex-1 py-1 font-semibold rounded hover:bg-white dark:hover:bg-dark-700 transition text-gray-600 dark:text-gray-300" data-time="24">24S</button>
+                <button class="filter-btn flex-1 py-1 font-semibold rounded hover:bg-white dark:hover:bg-dark-700 transition text-gray-600 dark:text-gray-300" data-time="0">TÜM</button>
             </div>
+
+            <!-- Search & Magnitude & Sort -->
             <div class="grid grid-cols-2 gap-2">
-                <input type="text" id="search-input" placeholder="Şehir ara..." class="w-full bg-white dark:bg-dark-900 border border-soft-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-500 transition placeholder-gray-400 dark:placeholder-gray-600 text-slate-700 dark:text-slate-200">
-                <select id="mag-filter" class="w-full bg-white dark:bg-dark-900 border border-soft-200 dark:border-gray-700 rounded-lg px-2 py-2 text-xs focus:outline-none text-slate-700 dark:text-slate-200 font-medium">
-                    <option value="0">Tüm</option><option value="3">> 3.0</option><option value="4">> 4.0</option><option value="5">> 5.0</option>
+                <input type="text" id="search-input" placeholder="🔍 Şehir / ilçe ara..." class="w-full bg-white dark:bg-dark-900 border border-soft-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-brand-500 transition placeholder-gray-400 dark:placeholder-gray-500 text-slate-700 dark:text-slate-200">
+                <select id="mag-filter" class="w-full bg-white dark:bg-dark-900 border border-soft-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-xs focus:outline-none text-slate-700 dark:text-slate-200 font-medium">
+                    <option value="0">Tüm Büyüklükler</option>
+                    <option value="3">&gt; 3.0 (Hissedilen)</option>
+                    <option value="4">&gt; 4.0 (Belirgin)</option>
+                    <option value="5">&gt; 5.0 (Şiddetli)</option>
                 </select>
+            </div>
+
+            <div class="flex items-center justify-between gap-2 text-xs">
+                <div class="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+                    <span id="update-timer" class="font-mono">Güncel</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-[11px] text-gray-400">Sırala:</span>
+                    <select id="sort-select" class="bg-white dark:bg-dark-900 border border-soft-200 dark:border-gray-700 rounded-md px-1.5 py-1 text-[11px] text-slate-700 dark:text-slate-200 focus:outline-none">
+                        <option value="time-desc">En Yeni</option>
+                        <option value="mag-desc">En Büyük</option>
+                        <option value="depth-asc">En Sığ</option>
+                        <option value="dist-asc" id="sort-dist-opt" disabled>En Yakın (GPS kapalı)</option>
+                    </select>
+                </div>
             </div>
         </div>
 
+        <!-- Quake List -->
         <div id="quake-list" class="flex-1 overflow-y-auto p-2 space-y-2 scroll-smooth bg-soft-50 dark:bg-transparent">
             <div class="animate-pulse space-y-3 p-2">
                 <div class="h-16 bg-soft-200 dark:bg-dark-700 rounded-lg"></div>
@@ -155,267 +208,1439 @@
             </div>
         </div>
 
-        <div class="md:hidden p-4 border-t border-soft-200 dark:border-gray-700 bg-soft-100 dark:bg-dark-900 flex justify-around">
-            <button class="mobile-footer-btn flex flex-col items-center text-xs text-gray-500 dark:text-gray-400" onclick="document.getElementById('stats-btn').click()"><span class="text-lg">📊</span> İstatistik</button>
-            <button class="mobile-footer-btn flex flex-col items-center text-xs text-gray-500 dark:text-gray-400" onclick="document.getElementById('sound-btn').click()"><span class="text-lg" id="mobile-sound-icon">🔇</span> Ses</button>
-            <button class="mobile-footer-btn flex flex-col items-center text-xs text-gray-500 dark:text-gray-400" onclick="document.getElementById('info-btn').click()"><span class="text-lg">ℹ️</span> Bilgi</button>
+        <!-- Mobile Footer -->
+        <div class="md:hidden p-3 border-t border-soft-200 dark:border-gray-700 bg-soft-100 dark:bg-dark-900 flex justify-around">
+            <button class="mobile-footer-btn flex flex-col items-center text-xs text-gray-500 dark:text-gray-400" onclick="openStatsModal()"><span class="text-base">📊</span> İstatistik</button>
+            <button class="mobile-footer-btn flex flex-col items-center text-xs text-gray-500 dark:text-gray-400" onclick="openSoundModal()"><span class="text-base" id="mobile-sound-icon">🔇</span> Alarm</button>
+            <button class="mobile-footer-btn flex flex-col items-center text-xs text-gray-500 dark:text-gray-400" onclick="openInfoModal('whistle')"><span class="text-base text-red-500">📢</span> Düdük / S.O.S</button>
+            <button class="mobile-footer-btn flex flex-col items-center text-xs text-gray-500 dark:text-gray-400" onclick="openInfoModal('info')"><span class="text-base">ℹ️</span> Rehber</button>
         </div>
     </aside>
 
+    <!-- Map Container -->
     <main class="flex-1 relative z-0 bg-soft-100 dark:bg-dark-900 pt-16 md:pt-0 h-full" id="map-container">
         <div id="map" class="w-full h-full outline-none"></div>
         
+        <!-- Map Controls (Top Right) -->
         <div class="absolute top-20 right-2 md:top-4 md:right-4 z-map-controls flex flex-col gap-2">
-            <button id="locate-btn" class="bg-white/90 dark:bg-dark-800/90 text-slate-700 dark:text-white p-3 rounded-lg shadow-lg hover:bg-soft-100 dark:hover:bg-dark-700 backdrop-blur border border-soft-200 dark:border-gray-700 transition" title="Konumum"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" /></svg></button>
-            <button id="reset-view-btn" class="bg-white/90 dark:bg-dark-800/90 text-slate-700 dark:text-white p-3 rounded-lg shadow-lg hover:bg-soft-100 dark:hover:bg-dark-700 backdrop-blur border border-soft-200 dark:border-gray-700 transition" title="Türkiye Odak"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" /></svg></button>
-            <button id="cluster-toggle-btn" class="bg-slate-500 text-white p-3 rounded-lg shadow-lg hover:bg-slate-600 backdrop-blur border border-slate-400 dark:border-gray-600 transition" title="Kümeleme"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" /></svg></button>
-            <button id="fullscreen-btn" class="hidden md:block bg-white/90 dark:bg-dark-800/90 text-slate-700 dark:text-white p-3 rounded-lg shadow-lg hover:bg-soft-100 dark:hover:bg-dark-700 backdrop-blur border border-soft-200 dark:border-gray-700 transition" title="Tam Ekran"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg></button>
+            <button id="locate-btn" class="bg-white/95 dark:bg-dark-800/95 text-slate-700 dark:text-white p-2.5 md:p-3 rounded-xl shadow-lg hover:bg-soft-100 dark:hover:bg-dark-700 backdrop-blur border border-soft-200 dark:border-gray-700 transition" title="Konumum ve Mesafe">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" /></svg>
+            </button>
+            
+            <button id="reset-view-btn" class="bg-white/95 dark:bg-dark-800/95 text-slate-700 dark:text-white p-2.5 md:p-3 rounded-xl shadow-lg hover:bg-soft-100 dark:hover:bg-dark-700 backdrop-blur border border-soft-200 dark:border-gray-700 transition" title="Türkiye Odak">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" /></svg>
+            </button>
+
+            <!-- Fault Lines Toggle -->
+            <button id="faults-toggle-btn" class="bg-red-500/90 hover:bg-red-600 text-white p-2.5 md:p-3 rounded-xl shadow-lg backdrop-blur border border-red-400 transition" title="Fay Hatlarını Göster / Gizle">
+                <span class="text-base font-bold">⚡</span>
+            </button>
+
+            <!-- Layers Switcher Button -->
+            <div class="relative">
+                <button id="layers-btn" class="bg-white/95 dark:bg-dark-800/95 text-slate-700 dark:text-white p-2.5 md:p-3 rounded-xl shadow-lg hover:bg-soft-100 dark:hover:bg-dark-700 backdrop-blur border border-soft-200 dark:border-gray-700 transition" title="Harita Katmanı Seç">
+                    <span class="text-base">🗺️</span>
+                </button>
+                <div id="layers-menu" class="hidden absolute right-12 top-0 bg-white/95 dark:bg-dark-800/95 backdrop-blur-md rounded-xl shadow-2xl border border-soft-200 dark:border-gray-700 p-2 w-36 space-y-1 z-[1500]">
+                    <div class="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-2 py-0.5">Katmanlar</div>
+                    <button class="layer-opt active w-full text-left px-2 py-1.5 text-xs rounded-lg flex items-center gap-2 hover:bg-brand-500/10 hover:text-brand-600 dark:hover:text-brand-400 font-semibold" data-layer="auto">🔄 Otomatik (Tema)</button>
+                    <button class="layer-opt w-full text-left px-2 py-1.5 text-xs rounded-lg flex items-center gap-2 hover:bg-brand-500/10 hover:text-brand-600 dark:hover:text-brand-400" data-layer="dark">🌙 Koyu Mod</button>
+                    <button class="layer-opt w-full text-left px-2 py-1.5 text-xs rounded-lg flex items-center gap-2 hover:bg-brand-500/10 hover:text-brand-600 dark:hover:text-brand-400" data-layer="light">☀️ Açık Mod</button>
+                    <button class="layer-opt w-full text-left px-2 py-1.5 text-xs rounded-lg flex items-center gap-2 hover:bg-brand-500/10 hover:text-brand-600 dark:hover:text-brand-400" data-layer="satellite">🛰️ Uydu Görünümü</button>
+                </div>
+            </div>
+
+            <button id="cluster-toggle-btn" class="bg-slate-500 text-white p-2.5 md:p-3 rounded-xl shadow-lg hover:bg-slate-600 backdrop-blur border border-slate-400 dark:border-gray-600 transition" title="Kümeleme">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" /></svg>
+            </button>
+            <button id="fullscreen-btn" class="hidden md:block bg-white/95 dark:bg-dark-800/95 text-slate-700 dark:text-white p-2.5 md:p-3 rounded-xl shadow-lg hover:bg-soft-100 dark:hover:bg-dark-700 backdrop-blur border border-soft-200 dark:border-gray-700 transition" title="Tam Ekran">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
+            </button>
         </div>
         
-        <div class="absolute bottom-20 right-2 md:bottom-8 md:right-4 z-map-controls bg-white/90 dark:bg-dark-800/90 p-3 rounded-lg backdrop-blur border border-soft-200 dark:border-gray-700 shadow-xl text-xs select-none text-slate-700 dark:text-gray-300 pointer-events-none scale-90 md:scale-100 origin-bottom-right">
+        <!-- Legend (Bottom Right) -->
+        <div class="absolute bottom-20 right-2 md:bottom-6 md:right-4 z-map-controls bg-white/90 dark:bg-dark-800/90 p-3 rounded-xl backdrop-blur border border-soft-200 dark:border-gray-700 shadow-xl text-xs select-none text-slate-700 dark:text-gray-300 pointer-events-none scale-90 md:scale-100 origin-bottom-right">
+            <div class="font-bold text-[10px] uppercase text-gray-400 mb-1.5 flex items-center justify-between">
+                <span>Büyüklük Dağılımı</span>
+                <span class="text-red-500 font-normal">⚡ Fay</span>
+            </div>
             <div class="space-y-1">
-                <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-quake-low"></span> < 3.0 (Hafif)</div>
+                <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-quake-low"></span> &lt; 3.0 (Hafif)</div>
                 <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-quake-mid"></span> 3.0 - 3.9 (Orta)</div>
                 <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-quake-high"></span> 4.0 - 4.9 (Yüksek)</div>
                 <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-quake-severe"></span> 5.0 - 5.9 (Şiddetli)</div>
-                <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-quake-extreme"></span> > 6.0 (Yıkıcı)</div>
+                <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-quake-extreme"></span> &gt; 6.0 (Yıkıcı)</div>
             </div>
         </div>
         
-        <div id="live-alert" class="absolute top-24 left-4 md:top-4 md:left-[440px] right-4 md:right-auto z-[3500] hidden transform transition-all duration-500 translate-y-[-150px]">
-            <div class="bg-red-600/95 backdrop-blur text-white px-4 py-3 rounded-lg shadow-2xl flex items-center gap-4 border border-red-400 max-w-md w-full">
+        <!-- Live Alert Banner -->
+        <div id="live-alert" class="absolute top-20 left-4 md:top-4 md:left-[430px] right-4 md:right-auto z-[3500] hidden transform transition-all duration-500 translate-y-[-150px]">
+            <div class="bg-red-600/95 backdrop-blur text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-4 border border-red-400 max-w-md w-full">
                 <div class="animate-bounce text-2xl">🚨</div>
-                <div><div class="font-bold text-lg">YENİ DEPREM</div><div id="alert-text" class="text-sm opacity-90">-</div></div>
+                <div class="flex-1">
+                    <div class="font-bold text-sm tracking-wide uppercase">YENİ DEPREM UYARISI</div>
+                    <div id="alert-text" class="text-sm opacity-95 font-semibold mt-0.5">-</div>
+                </div>
             </div>
         </div>
     </main>
 
+    <!-- Stats Modal -->
     <div id="stats-modal" class="fixed inset-0 z-modal bg-black/60 hidden items-center justify-center backdrop-blur-sm p-4">
-        <div class="bg-white dark:bg-dark-800 border border-soft-200 dark:border-gray-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative">
-            <button class="close-modal absolute top-4 right-4 text-slate-500 dark:text-gray-400 hover:text-black dark:hover:text-white text-xl">&times;</button>
-            <h2 class="text-xl font-bold mb-4 text-brand-600 dark:text-brand-500">📊 Deprem İstatistikleri</h2>
-            <div class="w-full h-64 md:h-80">
-                <canvas id="statsChart"></canvas>
+        <div class="bg-white dark:bg-dark-800 border border-soft-200 dark:border-gray-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button class="close-modal absolute top-4 right-4 text-slate-500 dark:text-gray-400 hover:text-black dark:hover:text-white text-2xl">&times;</button>
+            <h2 class="text-xl font-bold mb-4 text-brand-600 dark:text-brand-500 flex items-center gap-2">📊 Deprem İstatistik Paneli</h2>
+            
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                <div class="p-3 rounded-xl bg-soft-100 dark:bg-dark-700/60 border border-soft-200 dark:border-gray-700 text-center">
+                    <div class="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">Toplam Kayıt</div>
+                    <div id="modal-stat-total" class="text-lg font-bold text-brand-600 dark:text-brand-400 mt-1">-</div>
+                </div>
+                <div class="p-3 rounded-xl bg-soft-100 dark:bg-dark-700/60 border border-soft-200 dark:border-gray-700 text-center">
+                    <div class="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">En Büyük</div>
+                    <div id="modal-stat-max" class="text-lg font-bold text-red-500 mt-1">-</div>
+                </div>
+                <div class="p-3 rounded-xl bg-soft-100 dark:bg-dark-700/60 border border-soft-200 dark:border-gray-700 text-center">
+                    <div class="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">Ortalama Büyüklük</div>
+                    <div id="modal-stat-avg-mag" class="text-lg font-bold text-amber-500 mt-1">-</div>
+                </div>
+                <div class="p-3 rounded-xl bg-soft-100 dark:bg-dark-700/60 border border-soft-200 dark:border-gray-700 text-center">
+                    <div class="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">Ortalama Derinlik</div>
+                    <div id="modal-stat-avg-depth" class="text-lg font-bold text-emerald-500 mt-1">-</div>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div>
+                    <h3 class="text-xs uppercase font-bold tracking-wider text-gray-500 dark:text-gray-400 mb-2">Büyüklük Dağılımı</h3>
+                    <div class="w-full h-56">
+                        <canvas id="statsChart"></canvas>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-xs uppercase font-bold tracking-wider text-gray-500 dark:text-gray-400 mb-2">En Çok Deprem Olan İlk 5 Bölge</h3>
+                    <div class="w-full h-56">
+                        <canvas id="cityChart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div id="info-modal" class="fixed inset-0 z-modal bg-black/60 hidden items-center justify-center backdrop-blur-sm p-4">
+    <!-- Sound & Notification Settings Modal -->
+    <div id="sound-modal" class="fixed inset-0 z-modal bg-black/60 hidden items-center justify-center backdrop-blur-sm p-4">
         <div class="bg-white dark:bg-dark-800 border border-soft-200 dark:border-gray-700 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
-            <button class="close-modal absolute top-4 right-4 text-slate-500 dark:text-gray-400 hover:text-black dark:hover:text-white text-xl">&times;</button>
-            <h2 class="text-xl font-bold mb-4 text-brand-600 dark:text-brand-500">Hakkında & Güvenlik</h2>
-            <div class="space-y-4 text-sm text-slate-700 dark:text-gray-300">
-                <p>Bu uygulama <strong>Ferhat Savtak</strong> tarafından oluşturulmuştur. Uygulama <strong>Orhan Aydoğdu API</strong> aracılığıyla Kandilli ve AFAD verilerini anlık olarak derler.</p>
-                <div class="bg-green-50 dark:bg-dark-700 p-3 rounded-lg border-l-4 border-green-500">
-                    <h3 class="font-bold text-gray-900 dark:text-white mb-1">Deprem Anında:</h3>
-                    <ul class="list-disc list-inside">
-                        <li>Çök - Kapan - Tutun</li>
-                        <li>Pencerelerden uzak dur</li>
-                        <li>Merdivenleri kullanma</li>
+            <button class="close-modal absolute top-4 right-4 text-slate-500 dark:text-gray-400 hover:text-black dark:hover:text-white text-2xl">&times;</button>
+            <h2 class="text-xl font-bold mb-4 text-brand-600 dark:text-brand-500 flex items-center gap-2">🔔 Ses ve Bildirim Ayarları</h2>
+            
+            <div class="space-y-4 text-sm">
+                <div class="flex items-center justify-between p-3 rounded-xl bg-soft-100 dark:bg-dark-700/60 border border-soft-200 dark:border-gray-700">
+                    <div>
+                        <div class="font-bold">Sesli Alarm</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Yeni deprem kaydedildiğinde ses çal</div>
+                    </div>
+                    <input type="checkbox" id="sound-toggle-cb" class="w-5 h-5 accent-brand-600 rounded cursor-pointer">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-1.5">Minimum Büyüklük Eşiği</label>
+                    <select id="sound-threshold-sel" class="w-full bg-soft-100 dark:bg-dark-700 border border-soft-200 dark:border-gray-600 rounded-lg p-2.5 text-sm focus:outline-none">
+                        <option value="0">Tüm Depremler (&gt; 0.0)</option>
+                        <option value="3">3.0 ve üzeri</option>
+                        <option value="3.5" selected>3.5 ve üzeri (Önerilen)</option>
+                        <option value="4">4.0 ve üzeri</option>
+                        <option value="5">5.0 ve üzeri</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-1.5">Alarm Sesi Türü</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button class="sound-tone-btn active py-2 text-xs font-bold rounded-lg border border-brand-600 bg-brand-600 text-white" data-tone="beep">Bip (Klasik)</button>
+                        <button class="sound-tone-btn py-2 text-xs font-bold rounded-lg border border-soft-300 dark:border-gray-600 bg-white dark:bg-dark-700 text-gray-700 dark:text-gray-200" data-tone="sonar">Sonar Radar</button>
+                        <button class="sound-tone-btn py-2 text-xs font-bold rounded-lg border border-soft-300 dark:border-gray-600 bg-white dark:bg-dark-700 text-gray-700 dark:text-gray-200" data-tone="siren">Acil Siren</button>
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <button id="test-sound-btn" class="w-full py-2.5 rounded-xl border border-brand-500 text-brand-600 dark:text-brand-400 hover:bg-brand-500/10 transition font-bold text-xs flex items-center justify-center gap-2">
+                        🔊 Sesi Test Et
+                    </button>
+                </div>
+
+                <div class="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="font-bold text-blue-900 dark:text-blue-300 text-xs">Masaüstü Bildirimleri</div>
+                            <div class="text-[11px] text-blue-700 dark:text-blue-400 mt-0.5">Sekme arka plandayken uyarı al</div>
+                        </div>
+                        <button id="req-notif-btn" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition">
+                            İzin Ver
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info, Bag & Emergency Whistle Modal -->
+    <div id="info-modal" class="fixed inset-0 z-modal bg-black/60 hidden items-center justify-center backdrop-blur-sm p-4">
+        <div class="bg-white dark:bg-dark-800 border border-soft-200 dark:border-gray-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
+            <button class="close-modal absolute top-4 right-4 text-slate-500 dark:text-gray-400 hover:text-black dark:hover:text-white text-2xl">&times;</button>
+            
+            <!-- Modal Tabs -->
+            <div class="flex border-b border-soft-200 dark:border-gray-700 mb-4 pb-2 gap-2 text-xs font-bold">
+                <button class="info-tab-btn active px-3 py-1.5 rounded-lg bg-brand-600 text-white" data-tab="info">ℹ️ Bilgi & Güvenlik</button>
+                <button class="info-tab-btn px-3 py-1.5 rounded-lg bg-soft-200 dark:bg-dark-700 text-gray-600 dark:text-gray-300" data-tab="bag">🎒 Deprem Çantası</button>
+                <button class="info-tab-btn px-3 py-1.5 rounded-lg bg-soft-200 dark:bg-dark-700 text-red-500" data-tab="whistle">📢 Acil Düdük / S.O.S</button>
+            </div>
+
+            <!-- Tab Content: Info -->
+            <div id="tab-content-info" class="space-y-4 text-sm text-slate-700 dark:text-gray-300 overflow-y-auto flex-1 pr-1">
+                <p>Bu uygulama <strong>Ferhat Savtak</strong> tarafından geliştirilmiştir. Deprem bilgileri <strong>Orhan Aydoğdu API</strong> aracılığıyla Kandilli Rasathanesi ve AFAD kaynaklarından anlık senkronize edilmektedir.</p>
+                
+                <div class="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-200 dark:border-amber-900/40 text-amber-900 dark:text-amber-200 text-xs">
+                    <h3 class="font-bold mb-1">⚡ Aktif Fay Hatları Hakkında:</h3>
+                    <p>Haritadaki kırmızı çizgiler Türkiye'deki başlıca diri fay hatlarını (Kuzey Anadolu Fayı, Doğu Anadolu Fayı, Ege Grabenleri vb.) simgeler. Fay çizgilerine tıklayarak fay türünü ve jeolojik detayları görebilirsiniz.</p>
+                </div>
+
+                <div class="bg-green-50 dark:bg-dark-700 p-3 rounded-xl border-l-4 border-green-500">
+                    <h3 class="font-bold text-gray-900 dark:text-white mb-1">Deprem Anında Hayat Kurtaran Kurallar:</h3>
+                    <ul class="list-disc list-inside space-y-1 text-xs">
+                        <li><strong>Çök - Kapan - Tutun:</strong> Güvenli bir eşyanın yanında hedefi küçültün.</li>
+                        <li>Pencerelerden, devrilebilecek dolap ve aynalardan uzak durun.</li>
+                        <li>Sarsıntı anında merdiven ve asansörleri kesinlikle kullanmayın.</li>
                     </ul>
                 </div>
                 
                 <div class="grid grid-cols-2 gap-3 mt-4">
-                    <a href="tel:112" class="bg-red-600 hover:bg-red-700 text-white py-2 rounded text-center font-bold block transition">🚑 112 Acil</a>
-                    <a href="tel:122" class="bg-blue-600 hover:bg-blue-700 text-white py-2 rounded text-center font-bold block transition">🛡️ 122 AFAD</a>
+                    <a href="tel:112" class="bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-xl text-center font-bold block transition shadow-md">🚑 112 Acil Çağrı</a>
+                    <a href="tel:122" class="bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-center font-bold block transition shadow-md">🛡️ 122 AFAD</a>
                 </div>
 
-                <a href="https://github.com/ferhatsavtak" target="_blank" class="bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white py-2.5 rounded-lg text-center font-bold block transition mt-3 flex items-center justify-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="w-5 h-5" viewBox="0 0 16 16">
-                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
-                    </svg>
+                <a href="https://github.com/ferhatsavtak" target="_blank" class="bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white py-2.5 rounded-xl text-center font-bold block transition flex items-center justify-center gap-2 text-xs">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="w-4 h-4" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
                     GitHub Profiline Git
                 </a>
+            </div>
 
+            <!-- Tab Content: Bag Checklist -->
+            <div id="tab-content-bag" class="hidden space-y-3 text-sm text-slate-700 dark:text-gray-300 overflow-y-auto flex-1 pr-1">
+                <div class="flex items-center justify-between bg-soft-100 dark:bg-dark-700/60 p-3 rounded-xl border border-soft-200 dark:border-gray-700">
+                    <div>
+                        <div class="text-xs font-bold text-gray-500 dark:text-gray-400">Çanta Hazırlık Durumu</div>
+                        <div id="bag-progress-text" class="text-base font-bold text-brand-600 dark:text-brand-400">0 / 10 Hazır (%0)</div>
+                    </div>
+                    <div class="w-24 bg-gray-200 dark:bg-gray-600 rounded-full h-2.5 overflow-hidden">
+                        <div id="bag-progress-bar" class="bg-brand-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div id="bag-checklist" class="space-y-2 text-xs">
+                    <!-- Populated dynamically via JS with localStorage persistence -->
+                </div>
+            </div>
+
+            <!-- Tab Content: Emergency Whistle & SOS -->
+            <div id="tab-content-whistle" class="hidden flex-col items-center justify-center space-y-4 py-4 text-center overflow-y-auto flex-1">
+                <div class="text-xs text-gray-500 dark:text-gray-400 max-w-xs">
+                    Enkaz altında veya acil durumda arama-kurtarma ekiplerine sesinizi duyurmak için 3000 Hz keskin frekansta ses üretir.
+                </div>
+
+                <button id="whistle-main-btn" class="w-36 h-36 rounded-full bg-red-600 hover:bg-red-500 text-white font-extrabold text-lg shadow-2xl flex flex-col items-center justify-center gap-1 transition transform active:scale-95 border-4 border-red-300 animate-pulse">
+                    <span class="text-3xl">📢</span>
+                    <span>DÜDÜK ÇAL</span>
+                </button>
+
+                <div class="flex gap-2">
+                    <button id="sos-light-btn" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow transition">
+                        🚨 S.O.S Ekran Flaşı
+                    </button>
+                </div>
+                
+                <div class="text-[11px] text-gray-400 italic">
+                    Düdüğü durdurmak için butona tekrar dokunun.
+                </div>
             </div>
         </div>
     </div>
 
+    <!-- Toast Notification Element -->
+    <div id="app-toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[5000] bg-slate-900/95 dark:bg-white/95 text-white dark:text-slate-900 px-4 py-2.5 rounded-xl shadow-2xl text-xs font-semibold backdrop-blur transition-all duration-300 opacity-0 pointer-events-none translate-y-4 flex items-center gap-2">
+        <span id="toast-icon">ℹ️</span>
+        <span id="toast-msg">-</span>
+    </div>
+
+    <!-- External Leaflet & Chart.js -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
-    const API_ENDPOINTS = { 'kandilli': 'https://api.orhanaydogdu.com.tr/deprem/kandilli/live?limit=500', 'afad': 'https://api.orhanaydogdu.com.tr/deprem/afad/live?limit=500' };
-    let map, markers, singleLayer, baseTileLayer, activeData = [], cachedData = { kandilli: null, afad: null }, lastKnownIds = { kandilli: null, afad: null };
-    let isMuted = true, isSidebarOpen = false, useCluster = false, currentSource = 'kandilli', currentTimeFilter = 24, statsChart = null, audioAlert = null, audioContext = null;
+    const API_ENDPOINTS = { 
+        'kandilli': 'https://api.orhanaydogdu.com.tr/deprem/kandilli/live?limit=500', 
+        'afad': 'https://api.orhanaydogdu.com.tr/deprem/afad/live?limit=500' 
+    };
+    
+    // CARTO API Anahtarı (İsteğe bağlı: carto.com/basemaps/apikey)
+    const CARTO_API_KEY = '';
+
+    const BASEMAPS = {
+        dark: {
+            name: 'Koyu',
+            base: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+            ref: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+            attribution: '&copy; Esri, OpenStreetMap',
+            maxNativeZoom: 16,
+            maxZoom: 19
+        },
+        light: {
+            name: 'Açık',
+            base: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+            ref: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+            attribution: '&copy; Esri, OpenStreetMap',
+            maxNativeZoom: 16,
+            maxZoom: 19
+        },
+        satellite: {
+            name: 'Uydu',
+            base: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            ref: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+            attribution: '&copy; Esri, Maxar',
+            maxNativeZoom: 18,
+            maxZoom: 19
+        }
+    };
+
+    let map, markers, singleLayer, baseTileLayer, refTileLayer, faultsLayer, feltCircleLayer, userLocationMarker;
+    let activeData = [], cachedData = { kandilli: null, afad: null }, lastKnownIds = { kandilli: null, afad: null };
+    let isMuted = true, isSidebarOpen = false, useCluster = false, currentSource = 'kandilli', currentTimeFilter = 24;
+    let selectedLayerType = 'auto'; // 'auto', 'dark', 'light', 'satellite'
+    let currentSort = 'time-desc';
+    let userLocation = null;
+    let statsChart = null, cityChart = null;
     let newlyArrivedQuakeIds = new Set();
+    let lastFetchedTime = Date.now();
+    let showFaults = true;
 
-    function createBeepSound() {
-        try { audioContext = new (window.AudioContext || window.webkitAudioContext)(); return { play: function() { const oscillator = audioContext.createOscillator(); const gainNode = audioContext.createGain(); oscillator.connect(gainNode); gainNode.connect(audioContext.destination); oscillator.frequency.value = 880; oscillator.type = 'sine'; gainNode.gain.setValueAtTime(0.3, audioContext.currentTime); gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3); oscillator.start(audioContext.currentTime); oscillator.stop(audioContext.currentTime + 0.3); return Promise.resolve(); } }; } catch(e) { return { play: () => Promise.resolve() }; }
+    // Sound settings
+    let soundSettings = {
+        enabled: false,
+        threshold: 3.5,
+        tone: 'beep' // 'beep', 'sonar', 'siren'
+    };
+
+    // Web Audio synthesizer
+    let audioCtx = null;
+    let whistleOsc1 = null, whistleOsc2 = null, whistleGain = null;
+    let isWhistlePlaying = false, isSosActive = false;
+
+    function getAudioContext() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        return audioCtx;
     }
-    audioAlert = createBeepSound();
 
+    function playSoundAlert(toneType = soundSettings.tone) {
+        try {
+            const ctx = getAudioContext();
+            const now = ctx.currentTime;
+            
+            if (toneType === 'sonar') {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.setValueAtTime(560, now);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+                osc.start(now);
+                osc.stop(now + 1.2);
+            } else if (toneType === 'siren') {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.linearRampToValueAtTime(1200, now + 0.4);
+                osc.frequency.linearRampToValueAtTime(600, now + 0.8);
+                osc.frequency.linearRampToValueAtTime(1200, now + 1.2);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 1.4);
+                osc.start(now);
+                osc.stop(now + 1.4);
+            } else {
+                // Classic Beep
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, now);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            }
+        } catch (e) {
+            console.error("Audio error:", e);
+        }
+    }
+
+    function toggleWhistle() {
+        const btn = document.getElementById('whistle-main-btn');
+        if (isWhistlePlaying) {
+            stopWhistle();
+            btn.innerHTML = `<span class="text-3xl">📢</span><span>DÜDÜK ÇAL</span>`;
+            btn.classList.add('bg-red-600', 'animate-pulse');
+            btn.classList.remove('bg-gray-800');
+        } else {
+            startWhistle();
+            btn.innerHTML = `<span class="text-3xl">⏹️</span><span>DURDUR</span>`;
+            btn.classList.remove('bg-red-600', 'animate-pulse');
+            btn.classList.add('bg-gray-800');
+        }
+    }
+
+    function startWhistle() {
+        try {
+            const ctx = getAudioContext();
+            whistleOsc1 = ctx.createOscillator();
+            whistleOsc2 = ctx.createOscillator();
+            whistleGain = ctx.createGain();
+
+            // Real search & rescue whistle frequencies (~2850Hz & 3100Hz)
+            whistleOsc1.type = 'sine';
+            whistleOsc1.frequency.setValueAtTime(2850, ctx.currentTime);
+            whistleOsc2.type = 'square';
+            whistleOsc2.frequency.setValueAtTime(3120, ctx.currentTime);
+
+            whistleGain.gain.setValueAtTime(0.7, ctx.currentTime);
+
+            whistleOsc1.connect(whistleGain);
+            whistleOsc2.connect(whistleGain);
+            whistleGain.connect(ctx.destination);
+
+            whistleOsc1.start();
+            whistleOsc2.start();
+            isWhistlePlaying = true;
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    function stopWhistle() {
+        if (whistleOsc1) { try { whistleOsc1.stop(); whistleOsc1.disconnect(); } catch(e){} whistleOsc1 = null; }
+        if (whistleOsc2) { try { whistleOsc2.stop(); whistleOsc2.disconnect(); } catch(e){} whistleOsc2 = null; }
+        isWhistlePlaying = false;
+    }
+
+    // App Initialization
     document.addEventListener('DOMContentLoaded', () => {
-        initMap(); fetchSource('kandilli'); fetchSource('afad');
+        loadSavedSettings();
+        initMap();
+        initFaultsLayer();
+        initEmergencyBag();
+        fetchSource('kandilli');
+        fetchSource('afad');
         setInterval(() => { fetchSource('kandilli'); fetchSource('afad'); }, 30000);
-        setupEventListeners(); updateLogo();
+        setInterval(updateTimerDisplay, 1000);
+        setupEventListeners();
+        updateLogo();
     });
+
+    function loadSavedSettings() {
+        const savedSound = localStorage.getItem('deprem_sound_settings');
+        if (savedSound) {
+            try {
+                soundSettings = JSON.parse(savedSound);
+                isMuted = !soundSettings.enabled;
+            } catch(e){}
+        }
+        updateSoundUI();
+    }
+
+    function saveSoundSettings() {
+        soundSettings.enabled = !isMuted;
+        localStorage.setItem('deprem_sound_settings', JSON.stringify(soundSettings));
+    }
+
+    function updateSoundUI() {
+        const sIcon = isMuted ? '🔇' : '🔊';
+        const desktopIcon = document.getElementById('sound-icon');
+        const mobileIcon = document.getElementById('mobile-sound-icon');
+        const sBtn = document.getElementById('sound-btn');
+        if (desktopIcon) desktopIcon.innerText = sIcon;
+        if (mobileIcon) mobileIcon.innerText = sIcon;
+        if (sBtn) sBtn.classList.toggle('text-brand-600', !isMuted);
+
+        const cb = document.getElementById('sound-toggle-cb');
+        if (cb) cb.checked = !isMuted;
+        const thSel = document.getElementById('sound-threshold-sel');
+        if (thSel) thSel.value = soundSettings.threshold;
+
+        document.querySelectorAll('.sound-tone-btn').forEach(btn => {
+            const active = btn.dataset.tone === soundSettings.tone;
+            btn.classList.toggle('bg-brand-600', active);
+            btn.classList.toggle('text-white', active);
+            btn.classList.toggle('border-brand-600', active);
+            btn.classList.toggle('bg-white', !active);
+            btn.classList.toggle('dark:bg-dark-700', !active);
+        });
+    }
+
+    function getActiveTileConfig() {
+        const isDark = document.documentElement.classList.contains('dark');
+        let targetKey = selectedLayerType;
+        if (targetKey === 'auto') {
+            targetKey = isDark ? 'dark' : 'light';
+        }
+        return BASEMAPS[targetKey] || BASEMAPS.dark;
+    }
 
     function initMap() {
         map = L.map('map', { zoomControl: false }).setView([39.0, 35.0], 6);
-        baseTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+        const config = getActiveTileConfig();
+
+        baseTileLayer = L.tileLayer(config.base, {
+            attribution: config.attribution,
+            subdomains: config.subdomains || 'abc',
+            maxNativeZoom: config.maxNativeZoom,
+            maxZoom: config.maxZoom
+        }).addTo(map);
+
+        if (config.ref) {
+            refTileLayer = L.tileLayer(config.ref, {
+                attribution: '',
+                maxNativeZoom: config.maxNativeZoom,
+                maxZoom: config.maxZoom
+            }).addTo(map);
+        }
+
         L.control.zoom({ position: 'bottomleft' }).addTo(map); 
-        markers = L.markerClusterGroup({ maxClusterRadius: 40, iconCreateFunction: function(cluster) { const count = cluster.getChildCount(); let c = 'marker-cluster-'; if (count < 10) c += 'small'; else if (count < 50) c += 'medium'; else c += 'large'; return new L.DivIcon({ html: `<div class="flex items-center justify-center w-full h-full text-white font-bold rounded-full border-2 ${c}">${count}</div>`, className: 'custom-cluster-icon w-10 h-10', iconSize: new L.Point(40, 40) }); } });
-        singleLayer = L.layerGroup(); map.addLayer(singleLayer);
+        
+        markers = L.markerClusterGroup({ 
+            maxClusterRadius: 40, 
+            iconCreateFunction: function(cluster) { 
+                const count = cluster.getChildCount(); 
+                let c = 'marker-cluster-'; 
+                if (count < 10) c += 'small'; 
+                else if (count < 50) c += 'medium'; 
+                else c += 'large'; 
+                return new L.DivIcon({ 
+                    html: `<div class="flex items-center justify-center w-full h-full text-white font-bold rounded-full border-2 ${c}">${count}</div>`, 
+                    className: 'custom-cluster-icon w-10 h-10', 
+                    iconSize: new L.Point(40, 40) 
+                }); 
+            } 
+        });
+        
+        singleLayer = L.layerGroup(); 
+        map.addLayer(singleLayer);
     }
-    
+
+    function applyBasemap() {
+        const config = getActiveTileConfig();
+        if (baseTileLayer) {
+            baseTileLayer.setUrl(config.base);
+        }
+        if (config.ref) {
+            if (!refTileLayer) {
+                refTileLayer = L.tileLayer(config.ref, {
+                    maxNativeZoom: config.maxNativeZoom,
+                    maxZoom: config.maxZoom
+                }).addTo(map);
+            } else {
+                refTileLayer.setUrl(config.ref);
+            }
+        } else if (refTileLayer) {
+            map.removeLayer(refTileLayer);
+            refTileLayer = null;
+        }
+    }
+
+    function initFaultsLayer() {
+        if (typeof TURKEY_FAULTS === 'undefined') return;
+
+        faultsLayer = L.geoJSON(TURKEY_FAULTS, {
+            style: function(feature) {
+                return {
+                    color: '#ef4444',
+                    weight: 3,
+                    opacity: 0.85,
+                    dashArray: '6, 6'
+                };
+            },
+            onEachFeature: function(feature, layer) {
+                layer.bindTooltip(`⚡ <b>${feature.properties.name}</b><br><span class="text-[11px] opacity-80">${feature.properties.type}</span>`, { sticky: true });
+                layer.bindPopup(`<div class="p-2 min-w-[200px]">
+                    <div class="font-bold text-red-500 flex items-center gap-1.5 text-sm">⚡ ${feature.properties.name}</div>
+                    <div class="text-xs mt-1.5 text-slate-700 dark:text-gray-300"><b>Fay Tipi:</b> ${feature.properties.type}</div>
+                    <div class="text-xs text-slate-700 dark:text-gray-300 mt-0.5"><b>Deprem Riski:</b> <span class="text-red-500 font-bold">${feature.properties.risk}</span></div>
+                    <div class="text-xs text-slate-500 dark:text-gray-400 italic mt-1.5 border-t border-soft-200 dark:border-gray-700 pt-1">${feature.properties.desc}</div>
+                </div>`);
+            }
+        });
+
+        if (showFaults) {
+            faultsLayer.addTo(map);
+        }
+    }
+
+    function toggleFaults() {
+        showFaults = !showFaults;
+        const btn = document.getElementById('faults-toggle-btn');
+        if (showFaults) {
+            if (faultsLayer) map.addLayer(faultsLayer);
+            btn.classList.add('bg-red-500', 'border-red-400');
+            btn.classList.remove('bg-gray-500', 'border-gray-400');
+            showToast('⚡ Aktif Fay Hatları açıldı');
+        } else {
+            if (faultsLayer) map.removeLayer(faultsLayer);
+            btn.classList.remove('bg-red-500', 'border-red-400');
+            btn.classList.add('bg-gray-500', 'border-gray-400');
+            showToast('Aktif Fay Hatları gizlendi');
+        }
+    }
+
     function updateLogo() {
-        const isDark = document.documentElement.classList.contains('dark'); const desktopLogo = document.getElementById('logo-desktop'); const mobileLogo = document.getElementById('logo-mobile');
-        const logoSrc = isDark ? 'img/logo2.svg' : 'img/logo1.svg'; if(desktopLogo) desktopLogo.src = logoSrc; if(mobileLogo) mobileLogo.src = logoSrc;
+        const isDark = document.documentElement.classList.contains('dark');
+        const desktopLogo = document.getElementById('logo-desktop');
+        const mobileLogo = document.getElementById('logo-mobile');
+        const logoSrc = isDark ? 'img/logo2.svg' : 'img/logo1.svg';
+        if (desktopLogo) desktopLogo.src = logoSrc;
+        if (mobileLogo) mobileLogo.src = logoSrc;
     }
 
     function toggleTheme() {
-        const html = document.documentElement; const isDark = html.classList.toggle('dark');
+        const html = document.documentElement;
+        const isDark = html.classList.toggle('dark');
         document.querySelectorAll('#desktop-theme-btn, #mobile-theme-btn').forEach(btn => btn.innerText = isDark ? '🌞' : '🌚');
-        baseTileLayer.setUrl(`https://{s}.basemaps.cartocdn.com/${isDark ? 'dark' : 'light'}_all/{z}/{x}/{y}{r}.png`);
-        if(statsChart) { statsChart.destroy(); statsChart = null; } updateLogo();
+        if (selectedLayerType === 'auto') {
+            applyBasemap();
+        }
+        if (statsChart) { statsChart.destroy(); statsChart = null; }
+        if (cityChart) { cityChart.destroy(); cityChart = null; }
+        updateLogo();
     }
 
-    async function fetchSource(source) {
+    async function fetchSource(source, isManual = false) {
+        if (isManual) {
+            const icon = document.getElementById('refresh-icon');
+            if (icon) icon.classList.add('animate-spin');
+        }
         try {
-            const res = await fetch(API_ENDPOINTS[source]); const json = await res.json();
+            const res = await fetch(API_ENDPOINTS[source]);
+            const json = await res.json();
             if (json.status && json.result) {
-                const resultData = json.result; cachedData[source] = resultData; 
+                const resultData = json.result;
+                cachedData[source] = resultData;
+                lastFetchedTime = Date.now();
+                updateTimerDisplay();
+
                 if (resultData.length > 0) {
-                    const latestQuake = resultData[0]; const latestId = latestQuake.earthquake_id;
-                    if (lastKnownIds[source] !== null && lastKnownIds[source] !== latestId) { handleNewQuake(source, latestQuake); }
+                    const latestQuake = resultData[0];
+                    const latestId = latestQuake.earthquake_id;
+                    if (lastKnownIds[source] !== null && lastKnownIds[source] !== latestId) {
+                        handleNewQuake(source, latestQuake);
+                    }
                     lastKnownIds[source] = latestId;
                 }
-                if (currentSource === source) { activeData = resultData; updateUI(); }
+
+                if (currentSource === source) {
+                    activeData = resultData;
+                    updateUI();
+                }
+
+                if (isManual) showToast('Veriler başarıyla güncellendi', '✅');
             }
-        } catch (e) { console.error(`Error fetching ${source}:`, e); }
+        } catch (e) {
+            console.error(`Error fetching ${source}:`, e);
+            if (isManual) showToast('Veri çekilirken hata oluştu!', '⚠️');
+        } finally {
+            if (isManual) {
+                const icon = document.getElementById('refresh-icon');
+                if (icon) setTimeout(() => icon.classList.remove('animate-spin'), 600);
+            }
+        }
+    }
+
+    function updateTimerDisplay() {
+        const diffSeconds = Math.floor((Date.now() - lastFetchedTime) / 1000);
+        const timerEl = document.getElementById('update-timer');
+        if (timerEl) {
+            timerEl.innerText = diffSeconds < 5 ? 'Şimdi güncellendi' : `${diffSeconds} sn önce güncellendi`;
+        }
     }
 
     function handleNewQuake(source, quake) {
         newlyArrivedQuakeIds.add(quake.earthquake_id);
-        setTimeout(() => { newlyArrivedQuakeIds.delete(quake.earthquake_id); updateUI(); }, 300000);
+        setTimeout(() => { 
+            newlyArrivedQuakeIds.delete(quake.earthquake_id); 
+            updateUI(); 
+        }, 300000);
+
+        const mag = parseFloat(quake.mag);
 
         if (currentSource !== source) {
             toggleBadge(source, true);
         } else {
             focusAndWaveOnNewQuake(quake); 
             triggerAlert(quake);
-            if (!isMuted) { audioAlert.play().catch(console.error); }
+
+            // Check sound threshold
+            if (!isMuted && mag >= parseFloat(soundSettings.threshold)) {
+                playSoundAlert(soundSettings.tone);
+            }
+
+            // Browser push notification
+            if (Notification.permission === 'granted' && mag >= parseFloat(soundSettings.threshold)) {
+                new Notification(`🚨 YENİ DEPREM: ${quake.title}`, {
+                    body: `Büyüklük: ${quake.mag} | Derinlik: ${quake.depth}km`,
+                    icon: 'img/logo2.svg'
+                });
+            }
         }
     }
 
     function toggleBadge(source, show) {
-        const badge = document.getElementById(`badge-${source}`); const mobileBadge = document.getElementById('mobile-menu-badge');
-        if (show) { if(badge) badge.classList.remove('hidden'); if(mobileBadge) mobileBadge.classList.remove('hidden'); } 
-        else { if(badge) badge.classList.add('hidden'); if(mobileBadge) mobileBadge.classList.add('hidden'); }
+        const badge = document.getElementById(`badge-${source}`);
+        const mobileBadge = document.getElementById('mobile-menu-badge');
+        if (show) {
+            if (badge) badge.classList.remove('hidden');
+            if (mobileBadge) mobileBadge.classList.remove('hidden');
+        } else {
+            if (badge) badge.classList.add('hidden');
+            if (mobileBadge) mobileBadge.classList.add('hidden');
+        }
+    }
+
+    // Distance calculation using Haversine formula
+    function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return parseFloat((R * c).toFixed(1));
+    }
+
+    function getFeltRadiusMeters(mag) {
+        if (mag < 2.5) return 10000;
+        if (mag < 3.0) return 20000;
+        if (mag < 3.5) return 40000;
+        if (mag < 4.0) return 70000;
+        if (mag < 4.5) return 120000;
+        if (mag < 5.0) return 180000;
+        if (mag < 5.5) return 260000;
+        if (mag < 6.0) return 360000;
+        if (mag < 6.5) return 500000;
+        return 700000;
     }
 
     function updateUI() {
-        const filterMag = parseFloat(document.getElementById('mag-filter').value); const filterText = document.getElementById('search-input').value.toLowerCase();
+        const filterMag = parseFloat(document.getElementById('mag-filter').value);
+        const filterText = document.getElementById('search-input').value.toLowerCase();
+        
         let filtered = activeData.filter(q => {
-            const matchesMag = parseFloat(q.mag) >= filterMag; const matchesLoc = q.title.toLowerCase().includes(filterText);
-            let matchesTime = true; if (currentTimeFilter > 0) { matchesTime = new Date(q.date_time).getTime() >= Date.now() - (currentTimeFilter * 3600000); }
+            const matchesMag = parseFloat(q.mag) >= filterMag;
+            const matchesLoc = q.title.toLowerCase().includes(filterText);
+            let matchesTime = true;
+            if (currentTimeFilter > 0) {
+                matchesTime = new Date(q.date_time).getTime() >= Date.now() - (currentTimeFilter * 3600000);
+            }
             return matchesMag && matchesLoc && matchesTime;
         });
-        renderList(filtered); renderMapMarkers(filtered); updateStats(filtered);
+
+        // Add user distance property if location available
+        if (userLocation) {
+            filtered.forEach(q => {
+                q._distance = calculateDistanceKm(
+                    userLocation.lat, userLocation.lng,
+                    q.geojson.coordinates[1], q.geojson.coordinates[0]
+                );
+            });
+        }
+
+        // Apply Sorting
+        if (currentSort === 'mag-desc') {
+            filtered.sort((a, b) => parseFloat(b.mag) - parseFloat(a.mag));
+        } else if (currentSort === 'depth-asc') {
+            filtered.sort((a, b) => parseFloat(a.depth) - parseFloat(b.depth));
+        } else if (currentSort === 'dist-asc' && userLocation) {
+            filtered.sort((a, b) => (a._distance || 999999) - (b._distance || 999999));
+        } else {
+            // default: time-desc
+            filtered.sort((a, b) => new Date(b.date_time).getTime() - new Date(a.date_time).getTime());
+        }
+
+        renderList(filtered);
+        renderMapMarkers(filtered);
+        updateStats(filtered);
     }
 
-    function getQuakeColor(mag) { if(mag < 3.0) return '#10b981'; if(mag < 4.0) return '#fbbf24'; if(mag < 5.0) return '#f97316'; if(mag < 6.0) return '#ef4444'; return '#7f1d1d'; }
+    function getQuakeColor(mag) {
+        if(mag < 3.0) return '#10b981';
+        if(mag < 4.0) return '#fbbf24';
+        if(mag < 5.0) return '#f97316';
+        if(mag < 6.0) return '#ef4444';
+        return '#7f1d1d';
+    }
 
     function renderList(data) {
-        const listEl = document.getElementById('quake-list'); listEl.innerHTML = '';
-        if (data.length === 0) { listEl.innerHTML = '<div class="text-center text-slate-500 dark:text-gray-500 mt-10">Kriterlere uygun deprem bulunamadı.</div>'; return; }
+        const listEl = document.getElementById('quake-list');
+        listEl.innerHTML = '';
+        if (data.length === 0) {
+            listEl.innerHTML = '<div class="text-center text-slate-500 dark:text-gray-500 mt-10 py-6"><div class="text-2xl mb-2">🔍</div>Kriterlere uygun deprem bulunamadı.</div>';
+            return;
+        }
+
         data.forEach(q => {
-            const mag = parseFloat(q.mag); const dateObj = new Date(q.date_time); const colorCode = getQuakeColor(mag);
+            const mag = parseFloat(q.mag);
+            const dateObj = new Date(q.date_time);
+            const colorCode = getQuakeColor(mag);
             const isNew = newlyArrivedQuakeIds.has(q.earthquake_id);
+            const depthVal = parseFloat(q.depth);
+            const depthLabel = depthVal < 10 ? 'Sığ' : depthVal < 30 ? 'Orta' : 'Derin';
+
             const item = document.createElement('div');
-            item.className = `bg-white dark:bg-dark-700 hover:bg-soft-100 dark:hover:bg-dark-600 p-3 rounded-r-lg shadow-sm border-l-4 border-soft-200 dark:border-transparent cursor-pointer transition group animate-fade-in relative`;
-            item.style.borderLeftColor = colorCode; item.onclick = () => focusOnQuake(q);
-            item.innerHTML = `<div class="flex justify-between items-start"><div><div class="font-bold text-sm text-slate-700 dark:text-gray-200 group-hover:text-brand-600 dark:group-hover:text-brand-500 transition flex items-center gap-2">${q.title}${isNew ? '<span class="px-1.5 py-0.5 rounded text-[10px] bg-red-600 text-white animate-pulse">YENİ</span>' : ''}</div><div class="text-xs text-slate-500 dark:text-gray-400 mt-1"><span class="font-mono">${dateObj.toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span> <span class="opacity-60">(${timeSince(dateObj)})</span></div><div class="text-xs text-slate-400 dark:text-gray-500 mt-0.5">📉 ${parseFloat(q.depth).toFixed(1)}km</div></div><div class="flex flex-col items-end"><span class="text-xl font-bold" style="color: ${colorCode}">${mag.toFixed(1)}</span></div></div>`;
+            item.className = `bg-white dark:bg-dark-700/80 hover:bg-soft-100 dark:hover:bg-dark-600 p-3 rounded-xl shadow-sm border-l-4 border-soft-200 dark:border-transparent cursor-pointer transition group relative`;
+            item.style.borderLeftColor = colorCode;
+            item.onclick = () => focusOnQuake(q);
+
+            let distanceHtml = '';
+            if (userLocation && q._distance !== undefined) {
+                distanceHtml = `<span class="bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded text-[10px] font-semibold">📍 Size ${q._distance} km</span>`;
+            }
+
+            item.innerHTML = `
+                <div class="flex justify-between items-start gap-2">
+                    <div class="flex-1 min-w-0">
+                        <div class="font-bold text-xs sm:text-sm text-slate-800 dark:text-gray-200 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition truncate flex items-center gap-1.5">
+                            <span class="truncate">${q.title}</span>
+                            ${isNew ? '<span class="px-1.5 py-0.5 rounded text-[9px] bg-red-600 text-white font-extrabold animate-pulse shrink-0">YENİ</span>' : ''}
+                        </div>
+                        <div class="text-[11px] text-slate-500 dark:text-gray-400 mt-1 flex items-center gap-2 flex-wrap">
+                            <span class="font-mono">${dateObj.toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                            <span class="opacity-60">(${timeSince(dateObj)})</span>
+                            <span class="text-slate-400 dark:text-gray-500">📉 ${depthVal.toFixed(1)}km (${depthLabel})</span>
+                        </div>
+                        <div class="mt-1.5 flex items-center gap-2">
+                            ${distanceHtml}
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-end shrink-0 gap-1">
+                        <span class="text-lg sm:text-xl font-extrabold" style="color: ${colorCode}">${mag.toFixed(1)}</span>
+                        <button class="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition text-xs" title="Paylaş" onclick="event.stopPropagation(); shareQuake('${q.title.replace(/'/g, "\\'")}', '${mag}', '${q.depth}', '${q.date_time}')">
+                            📤
+                        </button>
+                    </div>
+                </div>
+            `;
             listEl.appendChild(item);
         });
     }
 
     function renderMapMarkers(data) {
-        markers.clearLayers(); singleLayer.clearLayers(); const layersToAdd = [];
+        markers.clearLayers();
+        singleLayer.clearLayers();
+        const layersToAdd = [];
         data.forEach(q => {
-            const lat = q.geojson.coordinates[1]; const lng = q.geojson.coordinates[0]; const mag = parseFloat(q.mag); const color = getQuakeColor(mag);
+            const lat = q.geojson.coordinates[1];
+            const lng = q.geojson.coordinates[0];
+            const mag = parseFloat(q.mag);
+            const color = getQuakeColor(mag);
             let radius = mag >= 5 ? 14 : mag >= 4 ? 10 : mag >= 3 ? 8 : 6;
-            const circle = L.circleMarker([lat, lng], { radius: radius, fillColor: color, color: "#fff", weight: 1, opacity: 1, fillOpacity: 0.8 });
-            circle.bindPopup(createPopupContent(q, color)); layersToAdd.push(circle);
+            const circle = L.circleMarker([lat, lng], { radius: radius, fillColor: color, color: "#fff", weight: 1.5, opacity: 1, fillOpacity: 0.85 });
+            circle.bindPopup(createPopupContent(q, color));
+            layersToAdd.push(circle);
         });
-        if(useCluster) markers.addLayers(layersToAdd); else layersToAdd.forEach(l => singleLayer.addLayer(l));
+        if (useCluster) markers.addLayers(layersToAdd);
+        else layersToAdd.forEach(l => singleLayer.addLayer(l));
     }
     
     function createPopupContent(q, color) {
-        const dateObj = new Date(q.date_time); const mag = parseFloat(q.mag); if (!color) color = getQuakeColor(mag);
-        return `<div class="p-2 min-w-[160px]"><h3 class="font-bold text-brand-600 dark:text-brand-500 mb-1">${q.title}</h3><div class="flex justify-between items-center mb-2"><span class="px-2 py-0.5 rounded text-sm font-bold text-white" style="background-color: ${color}">${mag.toFixed(1)}</span><span class="text-xs text-slate-500 dark:text-gray-300">${timeSince(dateObj)}</span></div><div class="text-xs text-slate-500 dark:text-gray-400 border-t border-soft-200 dark:border-gray-600 pt-2 mt-1"><div>📅 ${dateObj.toLocaleString('tr-TR')}</div><div>📉 Derinlik: ${q.depth} km</div><div class="mt-1 italic text-[10px] opacity-70">Kaynak: ${currentSource.toUpperCase()}</div></div></div>`;
+        const dateObj = new Date(q.date_time);
+        const mag = parseFloat(q.mag);
+        if (!color) color = getQuakeColor(mag);
+        const radiusKm = Math.round(getFeltRadiusMeters(mag) / 1000);
+
+        let distInfo = '';
+        if (userLocation && q._distance !== undefined) {
+            distInfo = `<div class="text-indigo-600 dark:text-indigo-400 font-semibold mt-1">📍 Konumunuza Uzaklık: <b>${q._distance} km</b></div>`;
+        }
+
+        const safeTitle = q.title.replace(/'/g, "\\'");
+
+        return `<div class="p-2 min-w-[190px]">
+            <h3 class="font-bold text-sm text-brand-600 dark:text-brand-400 mb-1.5 leading-tight">${q.title}</h3>
+            <div class="flex justify-between items-center mb-2">
+                <span class="px-2.5 py-0.5 rounded-lg text-sm font-extrabold text-white shadow-sm" style="background-color: ${color}">${mag.toFixed(1)} MW</span>
+                <span class="text-xs text-slate-500 dark:text-gray-300 font-medium">${timeSince(dateObj)}</span>
+            </div>
+            <div class="text-xs text-slate-600 dark:text-gray-300 border-t border-soft-200 dark:border-gray-700 pt-2 space-y-1">
+                <div>📅 ${dateObj.toLocaleString('tr-TR')}</div>
+                <div>📉 Derinlik: <b>${q.depth} km</b></div>
+                <div>📡 Tahmini Hissedilme Çapı: <b>~${radiusKm} km</b></div>
+                ${distInfo}
+                <div class="mt-2 pt-2 border-t border-soft-200 dark:border-gray-700 flex justify-between items-center text-[10px]">
+                    <span class="italic opacity-70">Kaynak: ${currentSource.toUpperCase()}</span>
+                    <button onclick="shareQuake('${safeTitle}', '${mag}', '${q.depth}', '${q.date_time}')" class="text-brand-600 dark:text-brand-400 font-bold hover:underline flex items-center gap-1">
+                        📤 Paylaş
+                    </button>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    function shareQuake(title, mag, depth, dateTime) {
+        const dateStr = new Date(dateTime).toLocaleString('tr-TR');
+        const text = `🚨 DEPREM BİLDİRİMİ\n📍 Konum: ${title}\n💥 Büyüklük: ${mag} MW\n📉 Derinlik: ${depth} km\n📅 Zaman: ${dateStr}\nKaynak: ${currentSource.toUpperCase()} - Deprem Monitörü`;
+        
+        if (navigator.share) {
+            navigator.share({
+                title: `Deprem: ${title} (${mag})`,
+                text: text,
+                url: window.location.href
+            }).catch(() => {});
+        } else {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Deprem bilgisi panoya kopyalandı!', '📋');
+            }).catch(() => {
+                showToast('Kopyalama başarısız oldu', '⚠️');
+            });
+        }
+    }
+
+    function showToast(msg, icon = 'ℹ️') {
+        const toast = document.getElementById('app-toast');
+        const toastMsg = document.getElementById('toast-msg');
+        const toastIcon = document.getElementById('toast-icon');
+        if (!toast || !toastMsg) return;
+        toastMsg.innerText = msg;
+        toastIcon.innerText = icon;
+        toast.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-4');
+        toast.classList.add('opacity-100', 'translate-y-0');
+        setTimeout(() => {
+            toast.classList.add('opacity-0', 'pointer-events-none', 'translate-y-4');
+            toast.classList.remove('opacity-100', 'translate-y-0');
+        }, 3000);
     }
 
     function updateStats(data) {
-        if(!data.length) { document.getElementById('stat-count').innerText = "0"; return; }
+        if (!data.length) { 
+            document.getElementById('stat-count').innerText = "0"; 
+            document.getElementById('stat-max').innerText = "-";
+            document.getElementById('stat-last').innerText = "-";
+            return; 
+        }
         document.getElementById('stat-count').innerText = data.length;
         document.getElementById('stat-max').innerText = Math.max(...data.map(q => parseFloat(q.mag))).toFixed(1);
-        const last = data[0]; document.getElementById('stat-last').innerText = `${last.title.split(' ')[0]} (${new Date(last.date_time).toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})})`;
+        const last = data[0]; 
+        document.getElementById('stat-last').innerText = `${last.title.split(' ')[0]} (${new Date(last.date_time).toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})})`;
     }
 
-    function initChart(data) {
-        const ctx = document.getElementById('statsChart').getContext('2d');
-        const counts = { '0-3': 0, '3-4': 0, '4-5': 0, '5-6': 0, '6+': 0 };
-        data.forEach(q => { const m = parseFloat(q.mag); if (m < 3) counts['0-3']++; else if (m < 4) counts['3-4']++; else if (m < 5) counts['4-5']++; else if (m < 6) counts['5-6']++; else counts['6+']++; });
+    function openStatsModal() {
+        document.getElementById('stats-modal').style.display = 'flex';
+        renderStatsCharts(activeData);
+    }
+
+    function renderStatsCharts(data) {
+        if (!data.length) return;
+
+        // Modal mini-summary
+        const total = data.length;
+        const mags = data.map(q => parseFloat(q.mag));
+        const depths = data.map(q => parseFloat(q.depth));
+        const maxMag = Math.max(...mags).toFixed(1);
+        const avgMag = (mags.reduce((a, b) => a + b, 0) / total).toFixed(2);
+        const avgDepth = (depths.reduce((a, b) => a + b, 0) / total).toFixed(1);
+
+        document.getElementById('modal-stat-total').innerText = total;
+        document.getElementById('modal-stat-max').innerText = `${maxMag} MW`;
+        document.getElementById('modal-stat-avg-mag').innerText = `${avgMag} MW`;
+        document.getElementById('modal-stat-avg-depth').innerText = `${avgDepth} km`;
+
         const isDark = document.documentElement.classList.contains('dark');
-        const chartData = { labels: ['< 3.0', '3-4', '4-5', '5-6', '> 6.0'], datasets: [{ data: Object.values(counts), backgroundColor: ['#10b981', '#fbbf24', '#f97316', '#ef4444', '#7f1d1d'], borderWidth: 0, borderRadius: 4 }] };
-        if (statsChart) { statsChart.data = chartData; statsChart.update(); } 
-        else { Chart.defaults.color = isDark ? '#94a3b8' : '#475569'; Chart.defaults.borderColor = isDark ? '#334155' : '#e2e8f0'; statsChart = new Chart(ctx, { type: 'bar', data: chartData, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } }); }
+        const textColor = isDark ? '#94a3b8' : '#475569';
+        const gridColor = isDark ? '#334155' : '#e2e8f0';
+
+        // 1. Magnitude Distribution Bar Chart
+        const counts = { '< 3.0': 0, '3.0 - 3.9': 0, '4.0 - 4.9': 0, '5.0 - 5.9': 0, '> 6.0': 0 };
+        data.forEach(q => { 
+            const m = parseFloat(q.mag); 
+            if (m < 3) counts['< 3.0']++; 
+            else if (m < 4) counts['3.0 - 3.9']++; 
+            else if (m < 5) counts['4.0 - 4.9']++; 
+            else if (m < 6) counts['5.0 - 5.9']++; 
+            else counts['> 6.0']++; 
+        });
+
+        const ctx1 = document.getElementById('statsChart').getContext('2d');
+        if (statsChart) statsChart.destroy();
+        statsChart = new Chart(ctx1, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(counts),
+                datasets: [{
+                    data: Object.values(counts),
+                    backgroundColor: ['#10b981', '#fbbf24', '#f97316', '#ef4444', '#7f1d1d'],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: textColor }, grid: { display: false } },
+                    y: { ticks: { color: textColor }, grid: { color: gridColor }, beginAtZero: true }
+                }
+            }
+        });
+
+        // 2. Top 5 Regions / Cities Chart
+        const cityCounts = {};
+        data.forEach(q => {
+            // Extracts province name from title like "AKOLUK-FEKE (ADANA)"
+            const match = q.title.match(/\(([^)]+)\)/);
+            const city = match ? match[1].trim() : q.title.split('-')[0].trim();
+            cityCounts[city] = (cityCounts[city] || 0) + 1;
+        });
+
+        const sortedCities = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const cityLabels = sortedCities.map(c => c[0]);
+        const cityValues = sortedCities.map(c => c[1]);
+
+        const ctx2 = document.getElementById('cityChart').getContext('2d');
+        if (cityChart) cityChart.destroy();
+        cityChart = new Chart(ctx2, {
+            type: 'bar',
+            data: {
+                labels: cityLabels,
+                datasets: [{
+                    data: cityValues,
+                    backgroundColor: '#6366f1',
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: textColor }, grid: { color: gridColor }, beginAtZero: true },
+                    y: { ticks: { color: textColor }, grid: { display: false } }
+                }
+            }
+        });
     }
 
     function focusAndWaveOnNewQuake(quake) {
-        const lat = parseFloat(quake.geojson.coordinates[1]); const lng = parseFloat(quake.geojson.coordinates[0]);
+        const lat = parseFloat(quake.geojson.coordinates[1]);
+        const lng = parseFloat(quake.geojson.coordinates[0]);
         map.flyTo([lat, lng], 10, { duration: 1.5 });
         const waveIcon = L.divIcon({ className: 'quake-wave-huge', html: `<div style="color: #ef4444; width: 100%; height: 100%;"></div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
-        const waveMarker = L.marker([lat, lng], { icon: waveIcon }).addTo(map);
+        const waveMarker = L.marker([lat, lng], { icon: waveIcon, interactive: false }).addTo(map);
         setTimeout(() => map.removeLayer(waveMarker), 10000);
     }
 
     function focusOnQuake(q) {
-        const lat = parseFloat(q.geojson.coordinates[1]); const lng = parseFloat(q.geojson.coordinates[0]); const color = getQuakeColor(parseFloat(q.mag));
-        if(window.innerWidth < 768) toggleSidebar(false);
-        map.flyTo([lat, lng], 10, { duration: 1.5 });
-        setTimeout(() => { L.popup({ offset: L.point(0, -5) }).setLatLng([lat, lng]).setContent(createPopupContent(q, color)).openOn(map); }, 1000);
+        const lat = parseFloat(q.geojson.coordinates[1]);
+        const lng = parseFloat(q.geojson.coordinates[0]);
+        const mag = parseFloat(q.mag);
+        const color = getQuakeColor(mag);
+        if (window.innerWidth < 768) toggleSidebar(false);
+        map.flyTo([lat, lng], 9, { duration: 1.5 });
+        
+        setTimeout(() => {
+            L.popup({ offset: L.point(0, -5) })
+                .setLatLng([lat, lng])
+                .setContent(createPopupContent(q, color))
+                .openOn(map);
+        }, 1000);
+
+        // Wave animation (non-interactive so it doesn't block clicks)
         const waveIcon = L.divIcon({ className: 'quake-wave-huge', html: `<div style="color: ${color}; width: 100%; height: 100%;"></div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
-        const waveMarker = L.marker([lat, lng], { icon: waveIcon }).addTo(map);
+        const waveMarker = L.marker([lat, lng], { icon: waveIcon, interactive: false }).addTo(map);
         setTimeout(() => map.removeLayer(waveMarker), 10000); 
+
+        // Draw Felt Radius Circle (non-interactive, clicks pass through to markers beneath)
+        if (feltCircleLayer) {
+            map.removeLayer(feltCircleLayer);
+        }
+        const feltRadius = getFeltRadiusMeters(mag);
+        feltCircleLayer = L.circle([lat, lng], {
+            radius: feltRadius,
+            color: color,
+            weight: 1.5,
+            dashArray: '5, 5',
+            fillColor: color,
+            fillOpacity: 0.12,
+            interactive: false
+        }).addTo(map);
+        feltCircleLayer.bringToBack();
+
+        setTimeout(() => {
+            if (feltCircleLayer) {
+                map.removeLayer(feltCircleLayer);
+                feltCircleLayer = null;
+            }
+        }, 15000);
     }
 
     function triggerAlert(quake) {
-        if(parseFloat(quake.mag) < 3.5) return;
-        const alertBanner = document.getElementById('live-alert'); document.getElementById('alert-text').innerText = `${quake.title} - ${quake.mag}`;
-        alertBanner.classList.remove('hidden'); requestAnimationFrame(() => alertBanner.style.transform = 'translateY(0)');
-        setTimeout(() => { alertBanner.style.transform = 'translateY(-150px)'; setTimeout(() => alertBanner.classList.add('hidden'), 500); }, 8000);
+        if (parseFloat(quake.mag) < 3.5) return;
+        const alertBanner = document.getElementById('live-alert');
+        document.getElementById('alert-text').innerText = `${quake.title} - ${quake.mag} MW (${quake.depth} km)`;
+        alertBanner.classList.remove('hidden');
+        requestAnimationFrame(() => alertBanner.style.transform = 'translateY(0)');
+        setTimeout(() => {
+            alertBanner.style.transform = 'translateY(-150px)';
+            setTimeout(() => alertBanner.classList.add('hidden'), 500);
+        }, 8000);
     }
 
-    function timeSince(date) { const seconds = Math.floor((new Date() - date) / 1000); let interval = seconds / 3600; if (interval > 1) return Math.floor(interval) + "s önce"; interval = seconds / 60; if (interval > 1) return Math.floor(interval) + "dk önce"; return "Şimdi"; }
-    function toggleSidebar(state = null) { const sidebar = document.getElementById('sidebar'); const overlay = document.getElementById('sidebar-overlay'); if (state === null) isSidebarOpen = !isSidebarOpen; else isSidebarOpen = state; if (isSidebarOpen) { sidebar.classList.remove('sidebar-closed'); sidebar.classList.add('sidebar-open'); overlay.classList.remove('hidden'); setTimeout(() => overlay.classList.remove('opacity-0'), 10); } else { sidebar.classList.add('sidebar-closed'); sidebar.classList.remove('sidebar-open'); overlay.classList.add('opacity-0'); setTimeout(() => overlay.classList.add('hidden'), 300); } }
+    function timeSince(date) {
+        const seconds = Math.floor((new Date() - date) / 1000);
+        let interval = seconds / 3600;
+        if (interval > 1) return Math.floor(interval) + "s önce";
+        interval = seconds / 60;
+        if (interval > 1) return Math.floor(interval) + "dk önce";
+        return "Şimdi";
+    }
+
+    function toggleSidebar(state = null) {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        if (state === null) isSidebarOpen = !isSidebarOpen;
+        else isSidebarOpen = state;
+        if (isSidebarOpen) {
+            sidebar.classList.remove('sidebar-closed');
+            sidebar.classList.add('sidebar-open');
+            overlay.classList.remove('hidden');
+            setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+        } else {
+            sidebar.classList.add('sidebar-closed');
+            sidebar.classList.remove('sidebar-open');
+            overlay.classList.add('opacity-0');
+            setTimeout(() => overlay.classList.add('hidden'), 300);
+        }
+    }
+
+    function openSoundModal() {
+        document.getElementById('sound-modal').style.display = 'flex';
+    }
+
+    function openInfoModal(tab = 'info') {
+        document.getElementById('info-modal').style.display = 'flex';
+        switchInfoTab(tab);
+    }
+
+    function switchInfoTab(tabId) {
+        document.querySelectorAll('.info-tab-btn').forEach(btn => {
+            const active = btn.dataset.tab === tabId;
+            btn.classList.toggle('active', active);
+            btn.classList.toggle('bg-brand-600', active);
+            btn.classList.toggle('text-white', active);
+            btn.classList.toggle('bg-soft-200', !active);
+            btn.classList.toggle('dark:bg-dark-700', !active);
+        });
+
+        document.getElementById('tab-content-info').classList.toggle('hidden', tabId !== 'info');
+        document.getElementById('tab-content-bag').classList.toggle('hidden', tabId !== 'bag');
+        document.getElementById('tab-content-whistle').classList.toggle('hidden', tabId !== 'whistle');
+    }
+
+    // Emergency Bag Checklist
+    const BAG_ITEMS = [
+        "En az 2 litre su (kişi başı)",
+        "Bozulmayan konserve & yüksek kalorili gıda",
+        "İlk yardım çantası ve düzenli ilaçlar",
+        "Düdük (Arama-kurtarma ses bildirimi için)",
+        "El feneri ve yedek piller",
+        "Yüklü Powerbank ve şarj kabloları",
+        "Önemli kimlik ve evrak fotokopileri",
+        "Bir miktar nakit para",
+        "Mevsime uygun yedek giysi & termal battaniye",
+        "Toz maskesi, ıslak mendil ve hijyen malzemeleri"
+    ];
+
+    function initEmergencyBag() {
+        const container = document.getElementById('bag-checklist');
+        if (!container) return;
+        const saved = JSON.parse(localStorage.getItem('deprem_bag_checked') || '[]');
+
+        container.innerHTML = '';
+        BAG_ITEMS.forEach((item, index) => {
+            const isChecked = saved.includes(index);
+            const row = document.createElement('label');
+            row.className = 'flex items-center gap-2.5 p-2 rounded-lg bg-soft-100 dark:bg-dark-700/50 hover:bg-soft-200 dark:hover:bg-dark-700 cursor-pointer transition';
+            row.innerHTML = `
+                <input type="checkbox" class="bag-item-cb w-4 h-4 accent-brand-600 rounded" data-index="${index}" ${isChecked ? 'checked' : ''}>
+                <span class="flex-1 ${isChecked ? 'line-through opacity-60 text-emerald-600 dark:text-emerald-400 font-medium' : ''}">${item}</span>
+            `;
+            container.appendChild(row);
+        });
+
+        container.querySelectorAll('.bag-item-cb').forEach(cb => {
+            cb.addEventListener('change', updateBagProgress);
+        });
+        updateBagProgress();
+    }
+
+    function updateBagProgress() {
+        const cbs = document.querySelectorAll('.bag-item-cb');
+        const checkedIndexes = [];
+        cbs.forEach(cb => {
+            if (cb.checked) checkedIndexes.push(parseInt(cb.dataset.index));
+            const span = cb.nextElementSibling;
+            if (span) {
+                span.classList.toggle('line-through', cb.checked);
+                span.classList.toggle('opacity-60', cb.checked);
+            }
+        });
+
+        localStorage.setItem('deprem_bag_checked', JSON.stringify(checkedIndexes));
+        const total = BAG_ITEMS.length;
+        const count = checkedIndexes.length;
+        const percent = Math.round((count / total) * 100);
+
+        const textEl = document.getElementById('bag-progress-text');
+        const barEl = document.getElementById('bag-progress-bar');
+        if (textEl) textEl.innerText = `${count} / ${total} Hazır (%${percent})`;
+        if (barEl) {
+            barEl.style.width = `${percent}%`;
+            barEl.classList.toggle('bg-emerald-500', percent === 100);
+            barEl.classList.toggle('bg-brand-600', percent < 100);
+        }
+    }
 
     function setupEventListeners() {
-        document.getElementById('mag-filter').addEventListener('change', updateUI); document.getElementById('search-input').addEventListener('input', updateUI);
-        document.querySelectorAll('.filter-btn').forEach(btn => btn.addEventListener('click', (e) => { document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active')); e.target.classList.add('active'); currentTimeFilter = parseInt(e.target.dataset.time); updateUI(); }));
-        document.querySelectorAll('.source-btn').forEach(btn => btn.addEventListener('click', (e) => { const target = e.currentTarget; const source = target.dataset.source; document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active')); target.classList.add('active'); toggleBadge(source, false); currentSource = source; if (cachedData[source]) { activeData = cachedData[source]; updateUI(); } else { document.getElementById('quake-list').innerHTML = '<div class="text-center p-4 mt-10"><div class="animate-spin h-8 w-8 border-4 border-brand-500 rounded-full border-t-transparent mx-auto"></div><div class="mt-2 text-xs opacity-50">Veriler Alınıyor...</div></div>'; fetchSource(source); } }));
+        document.getElementById('mag-filter').addEventListener('change', updateUI);
+        document.getElementById('search-input').addEventListener('input', updateUI);
+        
+        document.getElementById('sort-select').addEventListener('change', (e) => {
+            currentSort = e.target.value;
+            updateUI();
+        });
+
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                currentTimeFilter = parseInt(e.target.dataset.time);
+                updateUI();
+            });
+        });
+
+        document.querySelectorAll('.source-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const target = e.currentTarget;
+                const source = target.dataset.source;
+                document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+                target.classList.add('active');
+                toggleBadge(source, false);
+                currentSource = source;
+                if (cachedData[source]) {
+                    activeData = cachedData[source];
+                    updateUI();
+                } else {
+                    document.getElementById('quake-list').innerHTML = '<div class="text-center p-4 mt-10"><div class="animate-spin h-8 w-8 border-4 border-brand-500 rounded-full border-t-transparent mx-auto"></div><div class="mt-2 text-xs opacity-50">Veriler Alınıyor...</div></div>';
+                    fetchSource(source);
+                }
+            });
+        });
+
+        document.getElementById('refresh-btn').addEventListener('click', () => {
+            fetchSource(currentSource, true);
+        });
+
         document.getElementById('cluster-toggle-btn').addEventListener('click', (e) => { 
             useCluster = !useCluster; 
             const btn = e.currentTarget;
             btn.classList.toggle('bg-brand-600', useCluster);
             btn.classList.toggle('bg-slate-500', !useCluster);
-            if (useCluster) { map.removeLayer(singleLayer); map.addLayer(markers); } 
-            else { map.removeLayer(markers); map.addLayer(singleLayer); }
+            if (useCluster) {
+                map.removeLayer(singleLayer);
+                map.addLayer(markers);
+            } else {
+                map.removeLayer(markers);
+                map.addLayer(singleLayer);
+            }
             renderMapMarkers(activeData);
+            showToast(useCluster ? 'Deprem kümeleme aktif' : 'Bireysel deprem görünümü aktif');
         });
-        document.getElementById('fullscreen-btn').addEventListener('click', () => { if (!document.fullscreenElement) document.getElementById('map-container').requestFullscreen(); else document.exitFullscreen(); });
-        document.querySelectorAll('.close-modal').forEach(btn => btn.addEventListener('click', (e) => e.target.closest('.fixed').style.display = 'none'));
-        document.getElementById('desktop-theme-btn').addEventListener('click', toggleTheme); document.getElementById('mobile-theme-btn').addEventListener('click', toggleTheme);
-        const sBtn = document.getElementById('sound-btn'); const mSoundIcon = document.getElementById('mobile-sound-icon');
-        sBtn.addEventListener('click', () => { isMuted = !isMuted; if (!isMuted) { sBtn.innerText = '🔊'; if(mSoundIcon) mSoundIcon.innerText = '🔊'; if (audioContext && audioContext.state === 'suspended') { audioContext.resume(); } audioAlert.play().catch(console.error); } else { sBtn.innerText = '🔇'; if(mSoundIcon) mSoundIcon.innerText = '🔇'; } });
-        document.getElementById('mobile-menu-btn').addEventListener('click', () => toggleSidebar()); document.getElementById('sidebar-overlay').addEventListener('click', () => toggleSidebar(false));
+
+        document.getElementById('faults-toggle-btn').addEventListener('click', toggleFaults);
+
+        // Layer Switcher
+        const layersBtn = document.getElementById('layers-btn');
+        const layersMenu = document.getElementById('layers-menu');
+        layersBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            layersMenu.classList.toggle('hidden');
+        });
+        document.addEventListener('click', () => {
+            if (layersMenu) layersMenu.classList.add('hidden');
+        });
+
+        document.querySelectorAll('.layer-opt').forEach(opt => {
+            opt.addEventListener('click', (e) => {
+                const layer = e.currentTarget.dataset.layer;
+                selectedLayerType = layer;
+                document.querySelectorAll('.layer-opt').forEach(o => o.classList.remove('font-bold', 'text-brand-600', 'dark:text-brand-400'));
+                e.currentTarget.classList.add('font-bold', 'text-brand-600', 'dark:text-brand-400');
+                applyBasemap();
+                layersMenu.classList.add('hidden');
+                showToast(`Harita katmanı: ${e.currentTarget.innerText.trim()}`);
+            });
+        });
+
+        document.getElementById('fullscreen-btn').addEventListener('click', () => {
+            if (!document.fullscreenElement) document.getElementById('map-container').requestFullscreen();
+            else document.exitFullscreen();
+        });
+
+        document.querySelectorAll('.close-modal').forEach(btn => {
+            btn.addEventListener('click', (e) => e.target.closest('.fixed').style.display = 'none');
+        });
+
+        document.getElementById('desktop-theme-btn').addEventListener('click', toggleTheme);
+        document.getElementById('mobile-theme-btn').addEventListener('click', toggleTheme);
+
+        // Sound Button actions
+        document.getElementById('sound-btn').addEventListener('click', () => {
+            openSoundModal();
+        });
+        document.getElementById('mobile-sound-btn').addEventListener('click', () => {
+            openSoundModal();
+        });
+
+        // Sound Modal Settings
+        document.getElementById('sound-toggle-cb').addEventListener('change', (e) => {
+            isMuted = !e.target.checked;
+            soundSettings.enabled = e.target.checked;
+            saveSoundSettings();
+            updateSoundUI();
+            if (!isMuted) {
+                getAudioContext();
+                playSoundAlert();
+            }
+        });
+
+        document.getElementById('sound-threshold-sel').addEventListener('change', (e) => {
+            soundSettings.threshold = parseFloat(e.target.value);
+            saveSoundSettings();
+        });
+
+        document.querySelectorAll('.sound-tone-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                soundSettings.tone = e.currentTarget.dataset.tone;
+                saveSoundSettings();
+                updateSoundUI();
+                playSoundAlert(soundSettings.tone);
+            });
+        });
+
+        document.getElementById('test-sound-btn').addEventListener('click', () => {
+            getAudioContext();
+            playSoundAlert(soundSettings.tone);
+        });
+
+        document.getElementById('req-notif-btn').addEventListener('click', () => {
+            if ("Notification" in window) {
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        showToast('Masaüstü bildirimleri aktif edildi!', '🔔');
+                        new Notification("Deprem Monitörü", { body: "Bildirimler başarıyla açıldı." });
+                    } else {
+                        showToast('Bildirim izni reddedildi', '⚠️');
+                    }
+                });
+            } else {
+                showToast('Tarayıcınız bildirimleri desteklemiyor', '⚠️');
+            }
+        });
+
+        // Mobile Menu
+        document.getElementById('mobile-menu-btn').addEventListener('click', () => toggleSidebar());
+        document.getElementById('sidebar-overlay').addEventListener('click', () => toggleSidebar(false));
+
         document.getElementById('reset-view-btn').addEventListener('click', () => map.flyTo([39.0, 35.0], 6));
-        document.getElementById('locate-btn').addEventListener('click', () => { if (navigator.geolocation) { navigator.geolocation.getCurrentPosition(pos => { map.flyTo([pos.coords.latitude, pos.coords.longitude], 12); L.marker([pos.coords.latitude, pos.coords.longitude]).addTo(map).bindPopup("Konumunuz").openPopup(); }); } });
-        document.getElementById('stats-btn').addEventListener('click', () => { document.getElementById('stats-modal').style.display = 'flex'; initChart(activeData); });
-        document.getElementById('info-btn').addEventListener('click', () => { document.getElementById('info-modal').style.display = 'flex'; });
+
+        // Location & Distance calculation
+        document.getElementById('locate-btn').addEventListener('click', () => {
+            if (navigator.geolocation) {
+                showToast('Konumunuz alınıyor...', '📍');
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        userLocation = {
+                            lat: pos.coords.latitude,
+                            lng: pos.coords.longitude
+                        };
+                        map.flyTo([userLocation.lat, userLocation.lng], 10);
+                        
+                        if (userLocationMarker) map.removeLayer(userLocationMarker);
+                        userLocationMarker = L.circleMarker([userLocation.lat, userLocation.lng], {
+                            radius: 10,
+                            fillColor: '#3b82f6',
+                            color: '#fff',
+                            weight: 3,
+                            fillOpacity: 1
+                        }).addTo(map).bindPopup("<b>📍 Bulunduğunuz Konum</b>").openPopup();
+
+                        // Enable Nearest Sort
+                        const sortOpt = document.getElementById('sort-dist-opt');
+                        if (sortOpt) {
+                            sortOpt.disabled = false;
+                            sortOpt.innerText = '📍 En Yakın (Mesafeye Göre)';
+                        }
+                        updateUI();
+                        showToast('Konumunuz belirlendi ve mesafeler hesaplandı!', '🎯');
+                    },
+                    err => {
+                        showToast('Konum alınamadı: ' + err.message, '⚠️');
+                    }
+                );
+            }
+        });
+
+        document.getElementById('stats-btn').addEventListener('click', openStatsModal);
+        document.getElementById('info-btn').addEventListener('click', () => openInfoModal('info'));
+
+        // Modal Tabs
+        document.querySelectorAll('.info-tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                switchInfoTab(e.currentTarget.dataset.tab);
+            });
+        });
+
+        // Whistle & SOS actions
+        document.getElementById('whistle-main-btn').addEventListener('click', toggleWhistle);
+        
+        document.getElementById('sos-light-btn').addEventListener('click', () => {
+            isSosActive = !isSosActive;
+            const body = document.body;
+            const btn = document.getElementById('sos-light-btn');
+            if (isSosActive) {
+                body.classList.add('sos-active');
+                btn.innerText = '⏹️ Flaşı Kapat';
+                btn.classList.add('bg-black');
+            } else {
+                body.classList.remove('sos-active');
+                btn.innerText = '🚨 S.O.S Ekran Flaşı';
+                btn.classList.remove('bg-black');
+            }
+        });
     }
 </script>
 </body>
